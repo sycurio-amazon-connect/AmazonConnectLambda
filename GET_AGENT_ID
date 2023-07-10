@@ -1,0 +1,26 @@
+const AWS = require('aws-sdk');
+const docClient = new AWS.DynamoDB.DocumentClient({ apiVersion: '2012-08-10' });
+
+exports.handler = async (event, context, callback) => {
+    console.log(JSON.stringify(event));
+
+    const pin = Number(event.Details.Parameters.AgentPin);
+    console.log({ pin });
+    const getParams = {
+        TableName: process.env.tableName,
+        FilterExpression: 'PIN = :pin',
+        ExpressionAttributeValues: {
+            ':pin': pin
+        },
+    };
+    const result = await docClient.scan(getParams).promise();
+
+    console.log('Record', JSON.stringify(result));
+
+    const userId = result.Items[0].UserId;
+    const response = {
+        userId,
+    };
+
+    callback(null, response);
+};
