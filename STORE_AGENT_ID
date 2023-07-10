@@ -1,0 +1,72 @@
+const AWS = require('aws-sdk');
+const docClient = new AWS.DynamoDB.DocumentClient({ apiVersion: '2012-08-10' });
+
+exports.handler = async (event, context, callback) => {
+  console.log(JSON.stringify(event));
+
+  const userId = event.Details.Parameters.AgentARN.split('/')[3];
+  const agentARN = event.Details.Parameters.AgentARN;
+  
+  let dynamoDbTable = process.env.tableName;
+
+  const pin = await checkPINDuplication(dynamoDbTable);
+  console.log('PIN IS', pin);
+  const checkIdParams = {
+    ExpressionAttributeValues: {
+      ':userId': userId
+    },
+    KeyConditionExpression: 'UserId = :userId',
+    TableName: dynamoDbTable
+  };
+  const userIdExists = await docClient.query(checkIdParams).promise();
+  console.log('chatHistory', JSON.stringify(userIdExists));
+  let response;
+
+  if (!userIdExists.Items.length > 0) {
+    const params = {
+      TableName: dynamoDbTable,
+      Item: {
+        UserId: userId,
+        PIN: pin,
+        AgentARN: agentARN
+      }
+    };
+    console.log({ params });
+    await docClient.put(params).promise();
+    response = {
+      pin: pin,
+      userId: userId
+    };
+  }
+  else {
+    response = {
+      pin: userIdExists.Items[0].PIN,
+      userId: userId
+    }
+  }
+
+  callback(null, response);
+
+};
+
+async function checkPINDuplication (dynamoDbTable) {
+  let pin = Math.floor(1000 + Math.random() * 9000);
+  pin = Number(pin)
+  const getParams = {
+    TableName: dynamoDbTable,
+    FilterExpression: 'PIN = :pin',
+    ExpressionAttributeValues: {
+      ':pin': pin
+    }
+  };
+  const result = await docClient.scan(getParams).promise();
+
+  console.log('Record', JSON.stringify(result));
+
+  if (result.Items.length > 0) {
+    await checkPINDuplication();
+  }
+  else {
+    return pin;
+  }
+}
